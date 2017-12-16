@@ -36,7 +36,7 @@ class ThreadedTCPRequestHandler(SocketServer.BaseRequestHandler):
 	def handle(self):
 		data = self.receive_http_request()
 		f, request_header = unpack_http_header(data)
-		
+
 		host = request_header['Host']
 		port = 80
 
@@ -50,19 +50,48 @@ class ThreadedTCPRequestHandler(SocketServer.BaseRequestHandler):
 
 		#send dummy request and receive
 		request_result, response_header = unpack_http_header(self.receive_http_response_header(s))
+		if response_header.get('Transfer-Encoding', '') == 'chunked':
+			while True :
+				#dummy body chunked
+				buf = ''
+				while True :
+					buf += s.recv(1)
+					if'\r\n' in buf:
+						break
+				chunk_length = int(buf, 16)
+				s.recv(chunk_length+2)
+				if not chunk_length:
+					break
+		else :
+			#dummy body
+			s.recv(int(response_header.get('Content-Length', '0')))
 
 		if (response_header.get('Connection', '') == 'close') :
 			s.close()
 			s = socket(AF_INET, SOCK_STREAM)
 			s.connect((host,80))
+
 		# send real request
 		s.send('\r\n\r\n' + data)
 		#receive real response
 		real_packet = self.receive_http_response_header(s)
+		self.request.send(real_packet)
 		response_header = unpack_http_header(real_packet)[1]
-		print response_header.get('Content-Length')
 
-		self.forward_body(s, int(response_header.get('Content-Length', '0')))
+		if response_header.get('Transfer-Encoding', '') == 'chunked':
+			while True :
+				buf = ''
+				while True :
+					buf += s.recv(1)
+					if'\r\n' in buf:
+						break
+				self.request.send(buf)
+				chunk_length = int(buf, 16)
+				self.forward_body(s, chunk_length+2)
+				if not chunk_length:
+					break
+		else :
+			self.forward_body(s, int(response_header.get('Content-Length', '0')))
 
 	def finish(self):
 		pass
