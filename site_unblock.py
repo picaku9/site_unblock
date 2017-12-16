@@ -9,7 +9,6 @@ def unpack_http_header(header) :
 		key, value = one.split(': ', 1)
 		value = value.lstrip()
 		result[key] = value
-	print result
 	return first_method, result
 
 class ThreadedTCPRequestHandler(SocketServer.BaseRequestHandler):
@@ -30,17 +29,20 @@ class ThreadedTCPRequestHandler(SocketServer.BaseRequestHandler):
 		return packet
 
 
-    def forward_body(self, s, n):
-        for _ in xrange(n):
-            t = s.recv(1)
-            self.request.send(t)
+	def forward_body(self, s, n):
+		t = s.recv(n)
+		self.request.send(t)
 
 	def handle(self):
 		data = self.receive_http_request()
 		f, request_header = unpack_http_header(data)
-
+		
 		host = request_header['Host']
 		port = 80
+
+		if ':' in host:
+			host, port = host.split(':', 1)
+			port = int(port)
 
 		s = socket(AF_INET, SOCK_STREAM)
 		s.connect((host,80))
@@ -53,14 +55,13 @@ class ThreadedTCPRequestHandler(SocketServer.BaseRequestHandler):
 			s.close()
 			s = socket(AF_INET, SOCK_STREAM)
 			s.connect((host,80))
-
-
 		# send real request
 		s.send('\r\n\r\n' + data)
-
 		#receive real response
 		real_packet = self.receive_http_response_header(s)
-		response_header =unpack_http_header(real_packet)
+		response_header = unpack_http_header(real_packet)[1]
+		print response_header.get('Content-Length')
+
 		self.forward_body(s, int(response_header.get('Content-Length', '0')))
 
 	def finish(self):
