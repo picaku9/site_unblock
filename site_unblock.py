@@ -22,6 +22,7 @@ class ThreadedTCPRequestHandler(SocketServer.BaseRequestHandler):
 			packet += self.request.recv(1) #from client
 			if '\r\n\r\n' in packet:
 				break
+		return packet
 
 	def receive_http_response_header(self, s):
 		packet = ''
